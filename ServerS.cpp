@@ -1,6 +1,7 @@
 #include <iostream>
 #pragma comment(lib, "ws2_32.lib")
 #include <winsock2.h>
+#include <string>
 #pragma warning(disable: 4996)
 
 #define MAX_CONNECTIONS 100
@@ -12,13 +13,21 @@ int Counter = 0;
 
 //создание функции обмена сообщениями между клиентами
 void ClientHandler(int index) {
-	char msg[MSG_MAX_SIZE];
+	int msg_size; //размер принимаемого сообщения
 	while (true) {
-		recv(Connections[index], msg, sizeof(msg), NULL);
+		recv(Connections[index], (char*)&msg_size, sizeof(int), NULL); //принимаем размер с-ния
+		char* msg = new char[msg_size + 1]; //выделяем память под массив char
+		msg[msg_size] = '\0'; //нуль терминатор
+
+		recv(Connections[index], msg, msg_size, NULL); //принимаем само сообщение
+
 		for (int i = 0; i < Counter; i++) {
 			if (i == index) continue;
-			send(Connections[i], msg, sizeof(msg), NULL);
+
+			send(Connections[i], (char*)&msg_size, sizeof(int), NULL); //отправляем размер с-ния
+			send(Connections[i], msg, msg_size, NULL); //отправляем сообщение
 		}
+		delete[] msg; //очищаем память
 	}
 }
 
@@ -57,8 +66,10 @@ int main() {
 		}
 		else {
 			cout << "Client Connected!\n";
-			char msg[MSG_MAX_SIZE / 2] = "Privetstvuyu smotryashih!";
-			send(newConnection, msg, sizeof(msg), NULL); //отправка клиенту сообщения msg
+			string msg = "Privetstvuyu smotryashih!";
+			int msg_size = msg.size();
+			send(newConnection, (char*)&msg_size, sizeof(int), NULL);
+			send(newConnection, msg.c_str(), msg_size, NULL); //отправка клиенту сообщения msg
 			Connections[i] = newConnection; //запись сокета в массив
 			Counter++;
 			//создание нового потока для обмена сообщениями между клиентами
