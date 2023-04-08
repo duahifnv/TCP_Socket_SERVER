@@ -12,7 +12,7 @@ int Counter = 0;
 
 //создание функции обмена сообщениями между клиентами
 void ClientHandler(int index) {
-	char msg[MAX_CONNECTIONS];
+	char msg[MSG_MAX_SIZE];
 	while (true) {
 		recv(Connections[index], msg, sizeof(msg), NULL);
 		for (int i = 0; i < Counter; i++) {
@@ -57,7 +57,7 @@ int main() {
 		}
 		else {
 			cout << "Client Connected!\n";
-			char msg[MAX_CONNECTIONS / 2] = "Privetstvuyu smotryashih!";
+			char msg[MSG_MAX_SIZE / 2] = "Privetstvuyu smotryashih!";
 			send(newConnection, msg, sizeof(msg), NULL); //отправка клиенту сообщения msg
 			Connections[i] = newConnection; //запись сокета в массив
 			Counter++;
