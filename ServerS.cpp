@@ -2,6 +2,7 @@
 #pragma comment(lib, "ws2_32.lib")
 #include <winsock2.h>
 #include <string>
+#include <fstream>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
@@ -17,8 +18,26 @@ int Counter = 0;
 
 enum Packet {
 	P_ChatMessage,
-	P_Test
+	P_GetFile
 };
+
+//функция нахождения файла в системе
+bool DirFile(const char* filename) {
+	const char* folder = "./files/";
+	string fullname(folder);
+	fullname.append(filename);
+
+	ifstream fin;
+	fin.open(fullname);
+	if (!fin.is_open()) {
+		fin.close();
+		return false;
+	}
+	else {
+		fin.close();
+		return true;
+	}
+}
 
 //функция обработки пакетов
 bool ProccessPacket(int index, Packet packettype) {
@@ -42,10 +61,38 @@ bool ProccessPacket(int index, Packet packettype) {
 
 			Packet msgtype = P_ChatMessage;
 			send(Connections[i], (char*)&msgtype, sizeof(Packet), NULL);
+
 			send(Connections[i], (char*)&msg_size, sizeof(int), NULL); //отправляем размер с-ния
+
 			send(Connections[i], msg, msg_size, NULL); //отправляем сообщение
 		}
 		delete[] msg; //очищаем память
+
+		break;
+	}
+
+	case(P_GetFile): {
+		int Fname_size; //размер принимаемого сообщения
+		recv(Connections[index], (char*)&Fname_size, sizeof(int), NULL); //принимаем размер с-ния
+		char* Fname = new char[Fname_size + 1]; //выделяем память под массив char
+		Fname[Fname_size] = '\0'; //нуль терминатор
+
+		recv(Connections[index], Fname, Fname_size, NULL); //принимаем само сообщение
+
+		Packet msgtype = P_GetFile;
+		send(Connections[index], (char*)&msgtype, sizeof(Packet), NULL);
+
+		bool File_is_found = DirFile(Fname); //file found/not found
+		int FisF_size = sizeof(bool);
+
+		send(Connections[index], (char*)&FisF_size, sizeof(int), NULL);
+			
+		send(Connections[index], (char*)&File_is_found, FisF_size, NULL);
+
+
+		if (Fname == "exit") {
+			cout << "Client " << index + 1 << " disconnected!\n";
+		}
 
 		break;
 	}
@@ -121,8 +168,8 @@ int main() {
 			//создание нового потока для обмена сообщениями между клиентами
 			CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, (LPVOID)(i), NULL, NULL);
 
-			Packet testpacket = P_Test;
-			send(newConnection, (char*)&testpacket, sizeof(Packet), NULL);
+			/*Packet testpacket = P_Test;
+			send(newConnection, (char*)&testpacket, sizeof(Packet), NULL);*/
 		}
 	}
 
@@ -130,4 +177,3 @@ int main() {
 	WSACleanup();*/
 	return 0;
 }
-
