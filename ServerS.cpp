@@ -15,29 +15,58 @@ using namespace std;
 SOCKET Connections[MAX_CONNECTIONS];
 int Counter = 0;
 
+enum Packet {
+	P_ChatMessage,
+	P_Test
+};
 
-//создание функции обмена сообщениями между клиентами
-void ClientHandler(int index) {
-	int msg_size; //размер принимаемого сообщения
-	while (true) {
+//функция обработки пакетов
+bool ProccessPacket(int index, Packet packettype) {
+	switch (packettype) {
+	case(P_ChatMessage): {
+		int msg_size; //размер принимаемого сообщения
 		recv(Connections[index], (char*)&msg_size, sizeof(int), NULL); //принимаем размер с-ния
 		char* msg = new char[msg_size + 1]; //выделяем память под массив char
 		msg[msg_size] = '\0'; //нуль терминатор
 
 		recv(Connections[index], msg, msg_size, NULL); //принимаем само сообщение
 
-		if (msg=="exit") {
+		if (msg == "exit") {
 			cout << "Client " << index + 1 << " disconnected!\n";
 		}
 
 		for (int i = 0; i < Counter; i++) {
-			if (i == index) continue;
+			if (i == index) {
+				continue;
+			}
 
+			Packet msgtype = P_ChatMessage;
+			send(Connections[i], (char*)&msgtype, sizeof(Packet), NULL);
 			send(Connections[i], (char*)&msg_size, sizeof(int), NULL); //отправляем размер с-ния
 			send(Connections[i], msg, msg_size, NULL); //отправляем сообщение
 		}
 		delete[] msg; //очищаем память
+
+		break;
 	}
+	default: {
+		cout << "Unrecognized packet: " << packettype << endl;
+		break;
+	}
+	}
+	return true;
+}
+
+//функция удержания соединения между клиентом и сервером
+void ClientHandler(int index) {
+	Packet packettype;
+	while (true) {
+		recv(Connections[index], (char*)&packettype, sizeof(Packet), NULL);
+		if (!ProccessPacket(index, packettype)) {
+			break;
+		}
+	}
+	closesocket(Connections[index]); //закрываем сокет если не можем обработать пакет
 }
 
 int main() {
@@ -77,18 +106,28 @@ int main() {
 			cout << "Client " << i + 1 << " Connected!\n";
 			string msg = "***WELCOME TO THE SERVER***";
 			int msg_size = msg.size();
+
+			//отправка типа пакета
+			Packet msgtype = P_ChatMessage;
+			send(newConnection, (char*)&msgtype, sizeof(Packet), NULL);
+
+			//отправка приветственного сообщения
 			send(newConnection, (char*)&msg_size, sizeof(int), NULL);
-			send(newConnection, msg.c_str(), msg_size, NULL); //отправка клиенту сообщения msg
+			send(newConnection, msg.c_str(), msg_size, NULL);
 
 			Connections[i] = newConnection; //запись сокета в массив
 			Counter++;
+
 			//создание нового потока для обмена сообщениями между клиентами
-			CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, (LPVOID)(i), NULL, NULL); 
+			CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)ClientHandler, (LPVOID)(i), NULL, NULL);
+
+			Packet testpacket = P_Test;
+			send(newConnection, (char*)&testpacket, sizeof(Packet), NULL);
 		}
 	}
 
-	closesocket(newConnection);
-	WSACleanup();
+	/*closesocket(newConnection);
+	WSACleanup();*/
 	return 0;
 }
 
