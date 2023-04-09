@@ -2,14 +2,19 @@
 #pragma comment(lib, "ws2_32.lib")
 #include <winsock2.h>
 #include <string>
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
 #define MAX_CONNECTIONS 100
 #define MSG_MAX_SIZE 256
 using namespace std;
+
+
+
 //создание массива сокетов (100 соединений)
 SOCKET Connections[MAX_CONNECTIONS];
 int Counter = 0;
+
 
 //создание функции обмена сообщениями между клиентами
 void ClientHandler(int index) {
@@ -20,6 +25,10 @@ void ClientHandler(int index) {
 		msg[msg_size] = '\0'; //нуль терминатор
 
 		recv(Connections[index], msg, msg_size, NULL); //принимаем само сообщение
+
+		if (msg=="exit") {
+			cout << "Client " << index + 1 << " disconnected!\n";
+		}
 
 		for (int i = 0; i < Counter; i++) {
 			if (i == index) continue;
@@ -65,11 +74,12 @@ int main() {
 
 		}
 		else {
-			cout << "Client Connected!\n";
-			string msg = "Privetstvuyu smotryashih!";
+			cout << "Client " << i + 1 << " Connected!\n";
+			string msg = "***WELCOME TO THE SERVER***";
 			int msg_size = msg.size();
 			send(newConnection, (char*)&msg_size, sizeof(int), NULL);
 			send(newConnection, msg.c_str(), msg_size, NULL); //отправка клиенту сообщения msg
+
 			Connections[i] = newConnection; //запись сокета в массив
 			Counter++;
 			//создание нового потока для обмена сообщениями между клиентами
@@ -77,6 +87,8 @@ int main() {
 		}
 	}
 
+	closesocket(newConnection);
+	WSACleanup();
 	return 0;
 }
 
