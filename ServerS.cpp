@@ -3,6 +3,7 @@
 #include <winsock2.h>
 #include <string>
 #include <fstream>
+
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #pragma warning(disable: 4996)
 
@@ -16,18 +17,59 @@ using namespace std;
 SOCKET Connections[MAX_CONNECTIONS];
 int Counter = 0;
 
+//глобальная файловая переменная
+FILE* fb;
+
 enum Packet {
 	P_ChatMessage,
 	P_GetFile
 };
 
+//функция считывания файла и его побитовой отправки клиенту
+void Readf(FILE* fb, string fullname, int index) {
+	bool msg_is_readed = true;
+	int mir_size = sizeof(bool);
+
+	char rmessage[100];
+	byte smessage[4096]{ NULL };
+	int Elements;
+
+	//if (fread(smessage, sizeof(BYTE), 4096, fb) == NULL) {
+	//	msg_is_readed = false;
+	//	cout << "Can't read from a file: " << fullname << endl;
+	//	send(Connections[index], (char*)&mir_size, sizeof(int), NULL); //7
+	//	send(Connections[index], (char*)&msg_is_readed, sizeof(bool), NULL); //8
+	//}	
+
+	//else {
+		send(Connections[index], (char*)&mir_size, sizeof(int), NULL); //7
+		send(Connections[index], (char*)&msg_is_readed, sizeof(bool), NULL); //8
+
+		while ((Elements = fread(smessage, sizeof(BYTE), 4096, fb)) != NULL)
+		{
+			cout << "Sending file: " << fullname << " which contains next text: " << smessage << endl;
+			send(Connections[index], (char*)smessage, Elements, NULL); //9
+		}
+	//}
+}
+
 //функция нахождения файла в системе
-bool DirFile(const char* filename) {
+bool OpenFile(const char* filename, int index) {
 	const char* folder = "./files/";
 	string fullname(folder);
 	fullname.append(filename);
 
-	ifstream fin;
+	if ((fb = fopen(fullname.c_str(), "rb")) == NULL) {
+		cout << "Can't open " << filename << endl;
+		//fclose(fb);
+		return false;
+	}
+	else {
+		cout << "File " << fullname << " opened!\n";
+		return true;
+	}
+
+	/*ifstream fin;
 	fin.open(fullname);
 	if (!fin.is_open()) {
 		fin.close();
@@ -36,7 +78,9 @@ bool DirFile(const char* filename) {
 	else {
 		fin.close();
 		return true;
-	}
+	}*/
+
+
 }
 
 //функция обработки пакетов
@@ -44,61 +88,69 @@ bool ProccessPacket(int index, Packet packettype) {
 	switch (packettype) {
 	case(P_ChatMessage): {
 		int msg_size; //размер принимаемого сообщения
-		recv(Connections[index], (char*)&msg_size, sizeof(int), NULL); //принимаем размер с-ния
+		recv(Connections[index], (char*)&msg_size, sizeof(int), NULL); //2 принимаем размер с-ния
 		char* msg = new char[msg_size + 1]; //выделяем память под массив char
 		msg[msg_size] = '\0'; //нуль терминатор
 
-		recv(Connections[index], msg, msg_size, NULL); //принимаем само сообщение
+		recv(Connections[index], msg, msg_size, NULL); //3 принимаем само сообщение
 
 		if (msg == "exit") {
 			cout << "Client " << index + 1 << " disconnected!\n";
 		}
 
+		/*-----------------------SENDING MSG TO EVERY CLIENT-------------------*/
 		for (int i = 0; i < Counter; i++) {
 			if (i == index) {
 				continue;
 			}
 
 			Packet msgtype = P_ChatMessage;
-			send(Connections[i], (char*)&msgtype, sizeof(Packet), NULL);
+			send(Connections[i], (char*)&msgtype, sizeof(Packet), NULL); //4
 
-			send(Connections[i], (char*)&msg_size, sizeof(int), NULL); //отправляем размер с-ния
+			send(Connections[i], (char*)&msg_size, sizeof(int), NULL); //5 отправляем размер с-ния
 
-			send(Connections[i], msg, msg_size, NULL); //отправляем сообщение
+			send(Connections[i], msg, msg_size, NULL); //6 отправляем сообщение
 		}
 		delete[] msg; //очищаем память
-
+		/*---------------------------------------------------------------------*/
 		break;
 	}
 
 	case(P_GetFile): {
 		int Fname_size; //размер принимаемого сообщения
-		recv(Connections[index], (char*)&Fname_size, sizeof(int), NULL); //принимаем размер с-ния
+		recv(Connections[index], (char*)&Fname_size, sizeof(int), NULL); //2 принимаем размер с-ния
 		char* Fname = new char[Fname_size + 1]; //выделяем память под массив char
 		Fname[Fname_size] = '\0'; //нуль терминатор
 
-		recv(Connections[index], Fname, Fname_size, NULL); //принимаем само сообщение
+		recv(Connections[index], Fname, Fname_size, NULL); //3 принимаем само сообщение
 
 		Packet msgtype = P_GetFile;
-		send(Connections[index], (char*)&msgtype, sizeof(Packet), NULL);
+		send(Connections[index], (char*)&msgtype, sizeof(Packet), NULL); //4
 
-		bool File_is_found = DirFile(Fname); //file found/not found
+		/*-----------------SENDING MSG ABOUT FILE FOUND AND OPENED ON SERVER-------------------*/
+		
+		bool File_is_found = OpenFile(Fname, index); //file found/not found
 		int FisF_size = sizeof(bool);
 
-		send(Connections[index], (char*)&FisF_size, sizeof(int), NULL);
-			
-		send(Connections[index], (char*)&File_is_found, FisF_size, NULL);
+		send(Connections[index], (char*)&FisF_size, sizeof(int), NULL); //5
+		send(Connections[index], (char*)&File_is_found, FisF_size, NULL); //6
 
-
-		if (Fname == "exit") {
-			cout << "Client " << index + 1 << " disconnected!\n";
+		/*-----------------SENDING MSG ABOUT FILE READED AND DELIVERED TO CLIENT-------------------*/
+		
+		if (File_is_found) {
+			Readf(fb, Fname, index);
 		}
+
+		cout << "Successfully send file to client " << index + 1 << endl;
+		/*if (Fname == "exit") {
+			cout << "Client " << index + 1 << " disconnected!\n";
+		}*/
 
 		break;
 	}
 	default: {
-		cout << "Unrecognized packet: " << packettype << endl;
-		break;
+		cout << "Client disconnected!" << endl;
+		return false;
 	}
 	}
 	return true;
@@ -108,7 +160,7 @@ bool ProccessPacket(int index, Packet packettype) {
 void ClientHandler(int index) {
 	Packet packettype;
 	while (true) {
-		recv(Connections[index], (char*)&packettype, sizeof(Packet), NULL);
+		recv(Connections[index], (char*)&packettype, sizeof(Packet), NULL); //1
 		if (!ProccessPacket(index, packettype)) {
 			break;
 		}
@@ -117,6 +169,8 @@ void ClientHandler(int index) {
 }
 
 int main() {
+	setlocale(LC_ALL, "Russian");
+
 	WSAData wsadata;
 	WORD DLLVersion = MAKEWORD(2, 1);
 
@@ -140,6 +194,7 @@ int main() {
 
 	SOCKET newConnection; //создание нового сокета для удержания соединения с клиентом
 
+	cout << "Waiting for new connections\n\n";
 	//через цикл проверяем подключения 100 клиентов
 	for (int i = 0; i < MAX_CONNECTIONS; i++) {
 		newConnection = accept(sListen, (SOCKADDR*)&addr, &sizeofaddr);
@@ -156,11 +211,11 @@ int main() {
 
 			//отправка типа пакета
 			Packet msgtype = P_ChatMessage;
-			send(newConnection, (char*)&msgtype, sizeof(Packet), NULL);
+			send(newConnection, (char*)&msgtype, sizeof(Packet), NULL); //1
 
 			//отправка приветственного сообщения
-			send(newConnection, (char*)&msg_size, sizeof(int), NULL);
-			send(newConnection, msg.c_str(), msg_size, NULL);
+			send(newConnection, (char*)&msg_size, sizeof(int), NULL); //2
+			send(newConnection, msg.c_str(), msg_size, NULL); //3
 
 			Connections[i] = newConnection; //запись сокета в массив
 			Counter++;
@@ -173,7 +228,10 @@ int main() {
 		}
 	}
 
-	/*closesocket(newConnection);
-	WSACleanup();*/
+	for (int index = 0; index < Counter; index++) {
+		closesocket(Connections[index]);
+	}
+
+	WSACleanup();
 	return 0;
 }
